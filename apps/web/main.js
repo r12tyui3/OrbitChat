@@ -78,8 +78,15 @@ const els = {
   emojiBtn: $("#emojiBtn"),
   micBtn: $("#micBtn"),
   fileInput: $("#fileInput"),
+  imageInput: $("#imageInput"),
+  cameraBtn: $("#cameraBtn"),
+  gifBtn: $("#gifBtn"),
+  codeBtn: $("#codeBtn"),
+  pollBtn: $("#pollBtn"),
   themeToggle: $("#themeToggle"),
   clearAll: $("#clearAll"),
+  summarizeChat: $("#summarizeChat"),
+  exportChat: $("#exportChat"),
 };
 
 init();
@@ -98,6 +105,8 @@ function init() {
   // Chat actions
   els.renameChat.addEventListener("click", renameActiveChat);
   els.deleteChat.addEventListener("click", deleteActiveChat);
+  els.summarizeChat.addEventListener("click", summarizeActiveChat);
+  els.exportChat.addEventListener("click", exportActiveChat);
 
   // Composer
   autosizeTextarea(els.messageInput);
@@ -111,6 +120,11 @@ function init() {
   els.sendBtn.addEventListener("click", trySend);
   els.attachBtn.addEventListener("click", () => els.fileInput.click());
   els.fileInput.addEventListener("change", onFilePicked);
+  els.cameraBtn.addEventListener("click", () => els.imageInput.click());
+  els.imageInput.addEventListener("change", onImagePicked);
+  els.gifBtn.addEventListener("click", insertGifPlaceholder);
+  els.codeBtn.addEventListener("click", insertCodeBlock);
+  els.pollBtn.addEventListener("click", insertPollTemplate);
   els.emojiBtn.addEventListener("click", insertEmoji);
   els.micBtn.addEventListener("click", () => toast("Voice recording not wired yet 🔈"));
 
@@ -287,9 +301,41 @@ function trySend() {
 function onFilePicked(e) {
   const f = e.target.files?.[0];
   if (!f) return;
-  els.messageInput.value += (els.messageInput.value ? " " : "") + `[attachment: ${f.name}]`;
+  els.messageInput.value += (els.messageInput.value ? " " : "") + `[file: ${f.name}]`;
   onComposerChanged();
   e.target.value = "";
+}
+function onImagePicked(e) {
+  const f = e.target.files?.[0];
+  if (!f) return;
+  els.messageInput.value += (els.messageInput.value ? "\n" : "") + `![image](${URL.createObjectURL(f)})`;
+  onComposerChanged();
+  e.target.value = "";
+}
+function insertGifPlaceholder() {
+  const q = prompt("Search GIFs (placeholder):", "cheers");
+  if (!q) return;
+  const url = `https://media.giphy.com/media/3o6Zt8MgUuvSbkZYWc/giphy.gif`;
+  els.messageInput.value += (els.messageInput.value ? "\n" : "") + `![gif:${q}](${url})`;
+  onComposerChanged();
+}
+function insertCodeBlock() {
+  const lang = prompt("Language for code block:", "javascript");
+  const template = `\n\n\u0060\u0060\u0060${lang || ""}\n// your code here\n\u0060\u0060\u0060\n`;
+  els.messageInput.value += template;
+  onComposerChanged();
+}
+function insertPollTemplate() {
+  const q = prompt("Poll question:", "What should we build next?");
+  if (!q) return;
+  const options = ["Option A", "Option B", "Option C"];
+  const block = [
+    `\n[Poll] ${q}`,
+    ...options.map((o, i) => `(${i + 1}) ${o}`),
+    "Vote by replying with the option number.",
+  ].join("\n");
+  els.messageInput.value += (els.messageInput.value ? "\n" : "") + block + "\n";
+  onComposerChanged();
 }
 function insertEmoji() {
   const add = ["😊", "✨", "🚀", "🔥", "👍", "🤝"][Math.floor(Math.random() * 6)];
@@ -358,6 +404,41 @@ function toast(msg) {
     "position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:rgba(0,0,0,.65);color:#fff;padding:8px 12px;border-radius:10px;font-size:12px;z-index:1000";
   document.body.appendChild(div);
   setTimeout(() => div.remove(), 1500);
+}
+function download(filename, text) {
+  const a = document.createElement('a');
+  a.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text));
+  a.setAttribute('download', filename);
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+function summarizeActiveChat() {
+  const c = currentChat();
+  if (!c) return toast("No active chat");
+  const lastN = c.messages.slice(-20);
+  const summary = [
+    `Summary of "${c.name}":`,
+    ...lastN.map(m => `${m.who === 'me' ? 'You' : 'Other'}: ${m.text}`)
+  ].join('\n');
+  toast("Summary added as draft");
+  els.messageInput.value = summary + "\n\nTL;DR: ";
+  onComposerChanged();
+}
+function exportActiveChat() {
+  const c = currentChat();
+  if (!c) return toast("No active chat");
+  const lines = [
+    `Chat: ${c.name}`,
+    `Exported: ${new Date().toLocaleString()}`,
+    ''
+  ];
+  c.messages.forEach(m => {
+    lines.push(`[${new Date(m.t).toLocaleString()}] ${m.who.toUpperCase()}: ${m.text}`);
+  });
+  download(`${c.name.replace(/[^a-z0-9-_]+/gi,'_')}.txt`, lines.join('\n'));
+  toast("Exported");
 }
 function escapeHtml(s) {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
